@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     "Fast, reliable deliveries. Quick WhatsApp quotes and on-time arrivals.",
   icons: { icon: "/favicon.ico" },
   openGraph: {
-    title: "deal Cargo Services — Reliable Local Deliveries in Mombasa",
+    title: "Ideal Cargo Services — Reliable Local Deliveries in Mombasa",
     description: "Fast, reliable deliveries. Quick WhatsApp quotes and on-time arrivals.",
     url: "https://example.com",
     siteName: "Mombasa Light Transport",
