@@ -1,0 +1,54 @@
+/* Tailwind v4 – config-less */
+@import "tailwindcss";
+
+/* Brand base (light) */
+:root {
+  --background: #F5F3F0;  /* sand */
+  --foreground: #0B132B;  /* ink */
+}
+
+/* Dark mode (optional) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b132b;
+    --foreground: #f5f3f0;
+  }
+}
+
+/* Tailwind v4 theme tokens (used in class names) */
+@theme inline {
+  /* Colors */
+  --color-sand: var(--background);
+  --color-ink: var(--foreground);
+  --color-coast: #0F766E;   /* primary */
+  --color-coral: #F97316;   /* accent/CTA */
+  --color-seafoam: #10B981; /* success */
+
+  /* Shadows */
+  --shadow-soft: 0 8px 30px rgba(11, 19, 43, 0.08);
+
+  /* Fonts (hooked to next/font vars in layout.tsx) */
+  --font-sans: var(--font-inter), system-ui, ui-sans-serif, Arial, sans-serif;
+  --font-display: var(--font-manrope), var(--font-inter), system-ui, ui-sans-serif, Arial, sans-serif;
+}
+
+/* Minimal base styles */
+html, body { height: 100%; }
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Accessibility: visible focus ring using our coral */
+*:focus-visible {
+  outline: 2px solid var(--color-coral);
+  outline-offset: 2px;
+}
+
+/* Custom utilities that our components use */
+@utility font-display {
+  font-family: var(--font-display);
+}
