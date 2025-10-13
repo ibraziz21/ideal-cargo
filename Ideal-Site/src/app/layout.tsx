@@ -35,8 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           cooldownDays={7}
           armAfterMs={3000}
         />
-        {/* Sticky WhatsApp on mobile */}
-        <FloatingQuickQuote />
+      
       </body>
     </html>
   );

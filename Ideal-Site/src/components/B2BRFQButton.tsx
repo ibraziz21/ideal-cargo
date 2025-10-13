@@ -1,26 +1,45 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Building2, Check, FileUp, X, Mail, MessageCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Building2,
+  Check,
+  FileUp,
+  Mail,
+  MessageCircle,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 
-const PHONE_E164 = "+2547XXXXXXXX";     // your WhatsApp
-const RFQ_EMAIL  = "ops@idealcargo.co.ke"; // change to your ops email
+/**
+ * Mobile UX goals:
+ * - Bottom sheet on mobile (h-[92dvh]) with internal scrolling
+ * - Centered dialog on desktop
+ * - Sticky action bar
+ * - Large, clear inputs and toggles
+ * - Escape/overlay-close; focus initial field
+ * - Autoscroll to first error
+ */
+
+const PHONE_E164 = "+2547XXXXXXXX";         // your WhatsApp
+const RFQ_EMAIL  = "bravored21@gmail.com";  // your ops email
 
 type Form = {
   company: string;
   contact: string;
   phone: string;
   email: string;
-  businessType: string;   // hardware, retail, ecommerce, CFS, etc.
-  weeklyJobs: string;     // 3-5, 6-10, 10+
-  lanes: string;          // e.g., Changamwe -> Nyali, CFS -> CBD
-  payloads: string;       // sofas, appliances, hardware, loose cargo
-  needs: string[];        // ["POD photos","eTIMS invoices","GIT cover","Multi-drop"]
+  businessType: string;  // Hardware / Retail / E-commerce / CFS / Manufacturer
+  weeklyJobs: string;    // 3–5 / 6–10 / 11–20 / 20+
+  lanes: string;         // e.g., Changamwe → Nyali; CFS → CBD multi-drop
+  payloads: string;      // sofas, appliances, hardware, loose cargo
+  needs: string[];       // ["POD photos","eTIMS invoices","GIT cover","Multi-drop"]
   notes: string;
-  file?: File | null;     // optional LPO/spec attachment (local only preview)
+  file?: File | null;
 };
 
 const NEEDS = ["POD photos", "eTIMS invoices", "GIT cover", "Multi-drop"];
+const JOB_BUCKETS = ["3–5", "6–10", "11–20", "20+"];
 
 function buildWhatsApp(f: Form) {
   const lines = [
@@ -36,8 +55,10 @@ function buildWhatsApp(f: Form) {
     `Needs: ${f.needs.join(", ") || "-"}`,
     f.notes ? `Notes: ${f.notes}` : undefined,
     "",
-    "(via Ideal Cargo Services • B2B Modal)"
-  ].filter(Boolean).join("\n");
+    "(via Ideal Cargo Services • B2B Modal)",
+  ]
+    .filter(Boolean)
+    .join("\n");
   return encodeURIComponent(lines);
 }
 
@@ -49,163 +70,520 @@ function mailtoBody(f: Form) {
 export function B2BRFQButton({
   label = "Request trade quote",
   className = "",
-}: { label?: string; className?: string }) {
+}: {
+  label?: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>({
-    company: "", contact: "", phone: "", email: "",
-    businessType: "", weeklyJobs: "3–5", lanes: "", payloads: "",
-    needs: [], notes: "", file: null,
+    company: "",
+    contact: "",
+    phone: "",
+    email: "",
+    businessType: "",
+    weeklyJobs: JOB_BUCKETS[0],
+    lanes: "",
+    payloads: "",
+    needs: [],
+    notes: "",
+    file: null,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const firstRef = useRef<HTMLInputElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => { if (open) setTimeout(() => firstRef.current?.focus(), 0); }, [open]);
-  useEffect(() => { document.body.style.overflow = open ? "hidden" : ""; }, [open]);
+  // Lock body scroll when open
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
+  // Focus first field when opening
+  useEffect(() => {
+    if (open) setTimeout(() => firstRef.current?.focus(), 0);
+  }, [open]);
+
+  // Close on ESC
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   function toggleNeed(n: string) {
-    setForm(s => ({ ...s, needs: s.needs.includes(n) ? s.needs.filter(x => x !== n) : [...s.needs, n] }));
+    setForm((s) => ({
+      ...s,
+      needs: s.needs.includes(n) ? s.needs.filter((x) => x !== n) : [...s.needs, n],
+    }));
   }
 
   function validate() {
     const e: Record<string, string> = {};
-    if (!form.company.trim()) e.company = "Company is required.";
-    if (!form.contact.trim()) e.contact = "Contact name required.";
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = "Valid email required.";
-    if (!form.phone.trim()) e.phone = "Phone required.";
+    if (!form.company.trim()) e.company = "Company is required";
+    if (!form.contact.trim()) e.contact = "Contact name required";
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = "Valid email required";
+    if (!form.phone.trim()) e.phone = "Phone required";
     return e;
   }
 
+  function scrollToFirstError(e: Record<string, string>) {
+    const firstKey = Object.keys(e)[0];
+    if (!firstKey) return;
+    const el = sheetRef.current?.querySelector(`[data-field="${firstKey}"]`);
+    if (el && "scrollIntoView" in el) {
+      (el as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
   function submitWhatsApp() {
-    const e = validate(); setErrors(e);
-    if (Object.keys(e).length) return;
+    const e = validate();
+    setErrors(e);
+    if (Object.keys(e).length) return scrollToFirstError(e);
     const msg = buildWhatsApp(form);
-    const href = `https://wa.me/${PHONE_E164.replace("+","")}?text=${msg}`;
+    const href = `https://wa.me/${PHONE_E164.replace("+", "")}?text=${msg}`;
+    // @ts-ignore optional pixel
+    window.fbq?.("trackCustom", "B2BRFQSubmit", { channel: "whatsapp" });
     window.open(href, "_blank", "noopener,noreferrer");
+    setOpen(false);
   }
 
   function submitEmail() {
-    const e = validate(); setErrors(e);
-    if (Object.keys(e).length) return;
+    const e = validate();
+    setErrors(e);
+    if (Object.keys(e).length) return scrollToFirstError(e);
     const subject = encodeURIComponent(`Trade RFQ – ${form.company}`);
     const body = mailtoBody(form);
+    // @ts-ignore optional pixel
+    window.fbq?.("trackCustom", "B2BRFQSubmit", { channel: "email" });
     window.location.href = `mailto:${RFQ_EMAIL}?subject=${subject}&body=${body}`;
+    setOpen(false);
   }
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className={["inline-flex items-center gap-2 rounded-md bg-coral px-3 py-2 text-sm font-medium text-white shadow-soft hover:opacity-95", className].join(" ")}
+        className={[
+          "inline-flex items-center gap-2 rounded-md bg-coral px-3 py-2 text-sm font-medium text-white shadow-soft hover:opacity-95",
+          className,
+        ].join(" ")}
       >
-        <Building2 className="h-4 w-4" /> {label}
+        <Building2 className="h-4 w-4" />
+        {label}
       </button>
 
+      {/* Overlay */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-soft">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold text-ink">Request a trade quote</div>
-                <p className="mt-1 text-xs text-ink/70">Tell us about your operations. We’ll reply with rates, SLA, and next-step onboarding.</p>
+        <div
+          className="fixed inset-0 z-50 bg-black/30"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Request a trade quote"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
+        >
+          {/* Sheet / Dialog container */}
+          <div
+            ref={sheetRef}
+            className={[
+              // mobile: bottom sheet
+              "md:hidden",
+              "fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl border-t border-ink/10 bg-white shadow-soft",
+              "h-[92dvh] overflow-y-auto",
+            ].join(" ")}
+          >
+            <HeaderBar onClose={() => setOpen(false)} />
+            <FormContent
+              form={form}
+              setForm={setForm}
+              errors={errors}
+              firstRef={firstRef as React.RefObject<HTMLInputElement>}
+              onFile={(file) => setForm((s) => ({ ...s, file }))}
+            />
+            <ActionBar
+              onEmail={submitEmail}
+              onWhatsApp={submitWhatsApp}
+              fileName={form.file?.name}
+              mobile
+            />
+          </div>
+
+          {/* Desktop: centered dialog */}
+          <div className="hidden md:flex md:h-full md:items-center md:justify-center">
+            <div
+              className="z-[60] w-full max-w-2xl overflow-hidden rounded-xl border border-ink/10 bg-white shadow-soft"
+              role="document"
+            >
+              <HeaderBar onClose={() => setOpen(false)} />
+              <div className="max-h-[72vh] overflow-y-auto">
+                <FormContent
+                  form={form}
+                  setForm={setForm}
+                  errors={errors}
+                  firstRef={firstRef as React.RefObject<HTMLInputElement>}
+                  onFile={(file) => setForm((s) => ({ ...s, file }))}
+                />
               </div>
-              <button className="rounded-md p-1 text-ink/60 hover:bg-sand" onClick={() => setOpen(false)} aria-label="Close">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {/* Left column */}
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">Company</span>
-                <input ref={firstRef} className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.company} onChange={e=>setForm(s=>({...s, company:e.target.value}))}/>
-                {errors.company && <span className="mt-1 block text-xs text-coral">{errors.company}</span>}
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">Contact person</span>
-                <input className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.contact} onChange={e=>setForm(s=>({...s, contact:e.target.value}))}/>
-                {errors.contact && <span className="mt-1 block text-xs text-coral">{errors.contact}</span>}
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">Email</span>
-                <input type="email" className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.email} onChange={e=>setForm(s=>({...s, email:e.target.value}))}/>
-                {errors.email && <span className="mt-1 block text-xs text-coral">{errors.email}</span>}
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">Phone</span>
-                <input className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.phone} onChange={e=>setForm(s=>({...s, phone:e.target.value}))}/>
-                {errors.phone && <span className="mt-1 block text-xs text-coral">{errors.phone}</span>}
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">Business type</span>
-                <input placeholder="Hardware / Retail / E-commerce / CFS / Manufacturer" className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.businessType} onChange={e=>setForm(s=>({...s, businessType:e.target.value}))}/>
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-ink">Weekly jobs</span>
-                <select className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.weeklyJobs} onChange={e=>setForm(s=>({...s, weeklyJobs:e.target.value}))}>
-                  <option>3–5</option><option>6–10</option><option>11–20</option><option>20+</option>
-                </select>
-              </label>
-
-              <label className="md:col-span-2 block">
-                <span className="mb-1 block text-sm font-medium text-ink">Typical lanes</span>
-                <input placeholder="e.g., Changamwe → Nyali; CFS → CBD multi-drop" className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.lanes} onChange={e=>setForm(s=>({...s, lanes:e.target.value}))}/>
-              </label>
-
-              <label className="md:col-span-2 block">
-                <span className="mb-1 block text-sm font-medium text-ink">Typical payloads</span>
-                <input placeholder="Appliances, sofas, tiles, cement, loose cargo…" className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" value={form.payloads} onChange={e=>setForm(s=>({...s, payloads:e.target.value}))}/>
-              </label>
-
-              <div className="md:col-span-2">
-                <span className="mb-1 block text-sm font-medium text-ink">Operational needs</span>
-                <div className="flex flex-wrap gap-2">
-                  {NEEDS.map(n => (
-                    <button
-                      type="button"
-                      key={n}
-                      onClick={()=>toggleNeed(n)}
-                      className={["inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition",
-                        form.needs.includes(n) ? "border-coast bg-coast/10 text-coast" : "border-ink/15 bg-white text-ink/80 hover:bg-sand"
-                      ].join(" ")}
-                    >
-                      <Check className={form.needs.includes(n) ? "h-4 w-4" : "h-4 w-4 opacity-0"} /> {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <label className="md:col-span-2 block">
-                <span className="mb-1 block text-sm font-medium text-ink">Notes</span>
-                <textarea rows={3} className="w-full resize-none rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast" placeholder="Gate passes, CFS access, time windows, LPO process, etc." value={form.notes} onChange={e=>setForm(s=>({...s, notes:e.target.value}))}/>
-              </label>
-
-              {/* Optional file (local only preview) */}
-              <div className="md:col-span-2 flex items-center gap-2">
-                <label className="inline-flex items-center gap-2 rounded-md border border-ink/15 bg-white px-3 py-2 text-sm text-ink/80 hover:bg-sand cursor-pointer">
-                  <FileUp className="h-4 w-4" /> Attach LPO/spec (optional)
-                  <input type="file" className="hidden" onChange={e=>setForm(s=>({...s, file: e.target.files?.[0] || null}))}/>
-                </label>
-                {form.file && <span className="text-xs text-ink/60">{form.file.name}</span>}
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col-reverse items-center gap-2 sm:flex-row sm:justify-end">
-              <button className="w-full rounded-md border border-ink/15 bg-white px-4 py-2 text-sm text-ink/80 hover:bg-sand sm:w-auto" onClick={()=>setOpen(false)}>Cancel</button>
-              <button onClick={submitEmail} className="w-full rounded-md border border-ink/15 bg-white px-4 py-2 text-sm text-ink/80 hover:bg-sand sm:w-auto">
-                <Mail className="mr-2 inline h-4 w-4" /> Email RFQ
-              </button>
-              <button onClick={submitWhatsApp} className="w-full rounded-md bg-coral px-5 py-2 text-sm font-medium text-white shadow-soft hover:opacity-95 sm:w-auto">
-                <MessageCircle className="mr-2 inline h-4 w-4" /> WhatsApp RFQ
-              </button>
+              <ActionBar
+                onEmail={submitEmail}
+                onWhatsApp={submitWhatsApp}
+                fileName={form.file?.name}
+              />
             </div>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+/* ---------- Subcomponents ---------- */
+
+function HeaderBar({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="sticky top-0 z-10 flex items-center justify-between border-b border-ink/10 bg-white px-4 py-3">
+      <div className="flex items-center gap-2">
+        <div className="grid h-8 w-8 place-items-center rounded-md bg-coast/10 text-coast">
+          <ShieldCheck className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-ink">Request a trade quote</div>
+          <div className="text-[11px] text-ink/60">
+            SLA • eTIMS • POD photos • Optional GIT cover
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="rounded-md p-1 text-ink/60 hover:bg-sand"
+      >
+        <X className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
+function FormContent({
+  form,
+  setForm,
+  errors,
+  firstRef,
+  onFile,
+}: {
+  form: Form;
+  setForm: React.Dispatch<React.SetStateAction<Form>>;
+  errors: Record<string, string>;
+  firstRef: React.RefObject<HTMLInputElement>;
+  onFile: (f: File | null) => void;
+}) {
+  return (
+    <div className="px-4 pb-28 pt-4 md:pb-6">
+      {/* Company & Contact */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Field
+          label="Company"
+          dataField="company"
+          error={errors.company}
+          input={
+            <input
+              ref={firstRef}
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.company}
+              onChange={(e) => setForm((s) => ({ ...s, company: e.target.value }))}
+              placeholder="Legal or trading name"
+            />
+          }
+        />
+        <Field
+          label="Contact person"
+          dataField="contact"
+          error={errors.contact}
+          input={
+            <input
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.contact}
+              onChange={(e) => setForm((s) => ({ ...s, contact: e.target.value }))}
+              placeholder="Name"
+            />
+          }
+        />
+        <Field
+          label="Email"
+          dataField="email"
+          error={errors.email}
+          input={
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.email}
+              onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+              placeholder="name@company.ke"
+            />
+          }
+        />
+        <Field
+          label="Phone"
+          dataField="phone"
+          error={errors.phone}
+          input={
+            <input
+              inputMode="tel"
+              autoComplete="tel"
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.phone}
+              onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
+              placeholder="07XXXXXXXX / +2547XXXXXXXX"
+            />
+          }
+        />
+      </div>
+
+      {/* Business profile */}
+      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Field
+          label="Business type"
+          dataField="businessType"
+          hint="Hardware / Retail / E-commerce / CFS / Manufacturer"
+          input={
+            <input
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.businessType}
+              onChange={(e) => setForm((s) => ({ ...s, businessType: e.target.value }))}
+              placeholder="E-commerce retailer"
+            />
+          }
+        />
+        <RadioPillGroup
+          label="Weekly jobs"
+          options={JOB_BUCKETS}
+          value={form.weeklyJobs}
+          onChange={(v) => setForm((s) => ({ ...s, weeklyJobs: v }))}
+        />
+      </div>
+
+      {/* Ops details */}
+      <div className="mt-5 grid grid-cols-1 gap-3">
+        <Field
+          label="Typical lanes"
+          dataField="lanes"
+          hint="e.g., Changamwe → Nyali; CFS → CBD multi-drop"
+          input={
+            <input
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.lanes}
+              onChange={(e) => setForm((s) => ({ ...s, lanes: e.target.value }))}
+              placeholder="Changamwe → Nyali; CFS → CBD"
+            />
+          }
+        />
+        <Field
+          label="Typical payloads"
+          dataField="payloads"
+          hint="Appliances, sofas, tiles, cement, loose cargo…"
+          input={
+            <input
+              className="w-full rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.payloads}
+              onChange={(e) => setForm((s) => ({ ...s, payloads: e.target.value }))}
+              placeholder="Appliances, hardware, furniture"
+            />
+          }
+        />
+
+        <CheckboxPillGroup
+          label="Operational needs"
+          options={NEEDS}
+          value={form.needs}
+          onToggle={(n) =>
+            setForm((s) => ({
+              ...s,
+              needs: s.needs.includes(n)
+                ? s.needs.filter((x) => x !== n)
+                : [...s.needs, n],
+            }))
+          }
+        />
+
+        <Field
+          label="Notes"
+          dataField="notes"
+          input={
+            <textarea
+              rows={3}
+              className="w-full resize-none rounded-md border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-coast"
+              value={form.notes}
+              onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))}
+              placeholder="Gate passes, site induction, time windows, LPO process…"
+            />
+          }
+        />
+
+        {/* Optional file */}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-ink/15 bg-white px-3 py-2 text-sm text-ink/80 hover:bg-sand">
+            <FileUp className="h-4 w-4" />
+            Attach LPO/spec (optional)
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => onFile(e.currentTarget.files?.[0] || null)}
+            />
+          </label>
+          {form.file && (
+            <span className="text-xs text-ink/60 truncate">{form.file.name}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionBar({
+  onWhatsApp,
+  onEmail,
+  fileName,
+  mobile = false,
+}: {
+  onWhatsApp: () => void;
+  onEmail: () => void;
+  fileName?: string;
+  mobile?: boolean;
+}) {
+  return (
+    <div
+      className={[
+        "sticky bottom-0 z-10 border-t border-ink/10 bg-white",
+        mobile ? "px-4 pb-[env(safe-area-inset-bottom)]" : "px-4",
+      ].join(" ")}
+    >
+      <div className="mx-auto flex max-w-2xl flex-col items-stretch gap-2 py-3 sm:flex-row sm:justify-end">
+        <button
+          onClick={onEmail}
+          className="inline-flex items-center justify-center rounded-md border border-ink/15 bg-white px-4 py-2 text-sm text-ink/80 hover:bg-sand"
+        >
+          <Mail className="mr-2 h-4 w-4" /> Email RFQ
+        </button>
+        <button
+          onClick={onWhatsApp}
+          className="inline-flex items-center justify-center rounded-md bg-coral px-5 py-2 text-sm font-medium text-white shadow-soft hover:opacity-95"
+        >
+          <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp RFQ
+        </button>
+      </div>
+      {fileName && (
+        <div className="pb-3 text-center text-[11px] text-ink/60">
+          Attached: {fileName}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- UI helpers ---------- */
+
+function Field({
+  label,
+  input,
+  hint,
+  error,
+  dataField,
+}: {
+  label: string;
+  input: React.ReactNode;
+  hint?: string;
+  error?: string;
+  dataField: string;
+}) {
+  return (
+    <label className="block" data-field={dataField}>
+      <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
+      {input}
+      {hint && <span className="mt-1 block text-[11px] text-ink/60">{hint}</span>}
+      {error && <span className="mt-1 block text-xs text-coral">{error}</span>}
+    </label>
+  );
+}
+
+function RadioPillGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={[
+              "inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs transition",
+              value === opt
+                ? "border-coast bg-coast/10 text-coast"
+                : "border-ink/15 bg-white text-ink/80 hover:bg-sand",
+            ].join(" ")}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CheckboxPillGroup({
+  label,
+  options,
+  value,
+  onToggle,
+}: {
+  label: string;
+  options: string[];
+  value: string[];
+  onToggle: (opt: string) => void;
+}) {
+  return (
+    <div>
+      <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = value.includes(opt);
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onToggle(opt)}
+              className={[
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition",
+                active
+                  ? "border-coast bg-coast/10 text-coast"
+                  : "border-ink/15 bg-white text-ink/80 hover:bg-sand",
+              ].join(" ")}
+              aria-pressed={active}
+            >
+              <Check className={active ? "h-4 w-4" : "h-4 w-4 opacity-0"} />
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
