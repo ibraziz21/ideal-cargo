@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <Footer />
         <ExitIntent
-          waLink="https://wa.me/2547XXXXXXXX?text=Hi!%20I%20need%20a%20quick%20quote.%0APickup%20pin%3A%20%0ADrop%20pin(s)%3A%20%0AItems%3A%20%0ADate%2Ftime%3A%20%0ANeed%20helper%3F%20(Y%2FN)%3A"
+          waLink="https://wa.me/254769848996?text=Hi!%20I%20need%20a%20quick%20quote.%0APickup%20pin%3A%20%0ADrop%20pin(s)%3A%20%0AItems%3A%20%0ADate%2Ftime%3A%20%0ANeed%20helper%3F%20(Y%2FN)%3A"
           headline="Get a quick quote before you go?"
           blurb="Share pickup & drop pins — we’ll reply on WhatsApp in 3–5 minutes with a fixed quote."
           cooldownDays={7}

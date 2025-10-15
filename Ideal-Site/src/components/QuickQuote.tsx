@@ -14,7 +14,7 @@ type Props = {
   variant?: "primary" | "outline";
 };
 
-const PHONE_E164 = "+2547XXXXXXXX"; // ← set your WhatsApp number here once (E.164)
+const PHONE_E164 = "+254769848996"; // ← set your WhatsApp number here once (E.164)
 const STORAGE_KEY = "ideal_quote_last";
 
 type Form = {

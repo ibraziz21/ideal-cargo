@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { Phone, Menu, X } from "lucide-react";
 
 
-const PHONE_E164 = "+2547XXXXXXXX"; // set once
-const PHONE_LOCAL = "07XX XXX XXX";
+const PHONE_E164 = "+254769848996"; // set once
+const PHONE_LOCAL = "0769 848 996";
 
 const NAV = [
   { href: "#services", label: "Services" },

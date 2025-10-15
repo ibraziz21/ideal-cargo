@@ -100,7 +100,7 @@ export function Hero() {
         <div className="relative">
           <div className="relative aspect-[4/3] overflow-hidden rounded-xl shadow-soft">
             <Image
-              src="/truck-hero.jpg"
+              src="/herotruck.JPG"
               alt="Our team delivering safely and on time in Mombasa"
               fill
               priority

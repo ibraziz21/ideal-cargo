@@ -10,7 +10,7 @@ export default function Page() {
   return (
     <main>
       <Hero />
-      <TrustStrip />
+      {/* <TrustStrip /> */}
       <B2BStrip />
       <ServicesRates />
       <WhyChooseUs />
